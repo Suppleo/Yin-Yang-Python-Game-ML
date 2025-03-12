@@ -14,53 +14,6 @@ original_board = np.random.choice([0, 1, 2], (SIZE, SIZE), p=[0.2, 0.2, 0.6])
 board = original_board.copy()
 solver = Solver(board)
 
-def check_2x2_blocks():
-    invalid_cells = set()
-    for r in range(SIZE-1):
-        for c in range(SIZE-1):
-            # Check 2x2 block
-            block = board[r:r+2, c:c+2]
-            if np.all(block == 0) or np.all(block == 1):
-                invalid_cells.update([(r,c), (r,c+1), (r+1,c), (r+1,c+1)])
-    return invalid_cells
-
-def check_consecutive_blocks():
-    def flood_fill(r, c, color, visited):
-        if (r < 0 or r >= SIZE or c < 0 or c >= SIZE or 
-            (r,c) in visited or board[r,c] != color):
-            return 0
-        visited.add((r,c))
-        count = 1
-        for dr, dc in [(0,1), (1,0), (0,-1), (-1,0)]:
-            count += flood_fill(r+dr, c+dc, color, visited)
-        return count
-
-    # Count black and white regions
-    black_regions = []
-    white_regions = []
-    visited = set()
-    
-    for r in range(SIZE):
-        for c in range(SIZE):
-            if (r,c) not in visited:
-                if board[r,c] == 0:
-                    black_regions.append(flood_fill(r, c, 0, visited))
-                elif board[r,c] == 1:
-                    white_regions.append(flood_fill(r, c, 1, visited))
-    
-    return len(black_regions) == 1 and len(white_regions) == 1
-
-def check_win_condition():
-    # Check if board is full
-    if not np.any(board == 2):
-        if check_2x2_blocks():
-            return "Invalid: 2x2 blocks detected"
-        elif not check_consecutive_blocks():
-            return "Invalid: Regions must be connected"
-        else:
-            return "WIN"
-    return None
-
 def draw_grid():
     screen.fill(WHITE)
     
@@ -70,7 +23,7 @@ def draw_grid():
     x_offset = (screen.get_width() - board_width) // 2
     y_offset = (screen.get_height() - (board_height + 50)) // 2
     
-    invalid_cells = check_2x2_blocks()
+    invalid_cells = board.check_2x2_blocks()
 
     # Draw board with red backgrounds for invalid cells
     for r in range(SIZE):
@@ -85,8 +38,8 @@ def draw_grid():
                             y_offset + r * CELL_SIZE, 
                             CELL_SIZE, CELL_SIZE), 1)
             
-            if board[r, c] != 2:
-                color = BLACK if board[r, c] == 0 else WHITE
+            if board.grid[r, c] != 2:
+                color = BLACK if board.grid[r, c] == 0 else WHITE
                 center = (x_offset + c * CELL_SIZE + CELL_SIZE//2,
                          y_offset + r * CELL_SIZE + CELL_SIZE//2)
                 radius = CELL_SIZE//2 - 4
@@ -116,7 +69,7 @@ def draw_grid():
     screen.blit(back_text, (x_offset + 200, button_y + 5))
 
     # Check win condition and display message
-    win_status = check_win_condition()
+    win_status = board.check_win_condition()
     if win_status:
         font = pygame.font.Font(None, 48)
         if win_status == "WIN":
@@ -195,9 +148,9 @@ def main():
                         if (screen.get_width()//2 - button_width//2 <= x <= screen.get_width()//2 + button_width//2 and 
                             180 + i*button_spacing <= y <= 180 + i*button_spacing + button_height):
                             current_level = i + 1
-                            board = Board(current_level).grid
+                            board = Board(current_level)
                             solver = Solver(board)
-                            fixed_cells = {(r, c) for r in range(SIZE) for c in range(SIZE) if board[r, c] != 2}
+                            fixed_cells = {(r, c) for r in range(SIZE) for c in range(SIZE) if board.grid[r, c] != 2}
                             level_selected = True
                             break
         
@@ -218,9 +171,9 @@ def main():
                     
                     # Reset button
                     elif x_offset + 90 <= x <= x_offset + 170 and button_y <= y <= button_y + 30:
-                        board = Board(current_level).grid
+                        board = Board(current_level)
                         solver = Solver(board)
-                        fixed_cells = {(r, c) for r in range(SIZE) for c in range(SIZE) if board[r, c] != 2}
+                        fixed_cells = {(r, c) for r in range(SIZE) for c in range(SIZE) if board.grid[r, c] != 2}
                     
                     # Back button
                     elif x_offset + 180 <= x <= x_offset + 260 and button_y <= y <= button_y + 30:
@@ -234,17 +187,17 @@ def main():
                         board_y = (y - y_offset) // CELL_SIZE
                         if (board_y, board_x) not in fixed_cells:
                             if event.button == 1:  # Left click
-                                if board[board_y, board_x] == 0:  # If black
-                                    board[board_y, board_x] = 2  # Change to grey
+                                if board.grid[board_y, board_x] == 0:  # If black
+                                    board.grid[board_y, board_x] = 2  # Change to grey
                                 else:
-                                    board[board_y, board_x] = 0  # Change to black
+                                    board.grid[board_y, board_x] = 0  # Change to black
                             elif event.button == 3:  # Right click
-                                if board[board_y, board_x] == 1:  # If white
-                                    board[board_y, board_x] = 2  # Change to grey
+                                if board.grid[board_y, board_x] == 1:  # If white
+                                    board.grid[board_y, board_x] = 2  # Change to grey
                                 else:
-                                    board[board_y, board_x] = 1  # Change to white
+                                    board.grid[board_y, board_x] = 1  # Change to white
                             else:
-                                board[board_y, board_x] = 2
+                                board.grid[board_y, board_x] = 2
 
                             # # Check if the puzzle is solved
                             # win_status = check_win_condition()
