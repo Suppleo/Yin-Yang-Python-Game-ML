@@ -9,11 +9,6 @@ pygame.init()
 screen = pygame.display.set_mode((SIZE * CELL_SIZE * 2, SIZE * CELL_SIZE * 2)) 
 pygame.display.set_caption("Yin-Yang Puzzle")
 
-# Tạo bảng ban đầu
-original_board = np.random.choice([0, 1, 2], (SIZE, SIZE), p=[0.2, 0.2, 0.6])
-board = original_board.copy()
-solver = Solver(board)
-
 def draw_grid():
     screen.fill(WHITE)
     
@@ -148,9 +143,10 @@ def main():
                         if (screen.get_width()//2 - button_width//2 <= x <= screen.get_width()//2 + button_width//2 and 
                             180 + i*button_spacing <= y <= 180 + i*button_spacing + button_height):
                             current_level = i + 1
-                            board = Board(current_level)
-                            solver = Solver(board)
+                            board = Board(current_level)    
                             fixed_cells = {(r, c) for r in range(SIZE) for c in range(SIZE) if board.grid[r, c] != 2}
+                            solver = Solver(board, fixed_cells)
+                            solver.draw_callback = draw_grid
                             level_selected = True
                             break
         
@@ -167,13 +163,16 @@ def main():
                     
                     # Solve button
                     if x_offset <= x <= x_offset + 80 and button_y <= y <= button_y + 30:
-                        solver.bfs_solve()
+                        # solver.bfs_solve()
+                        # solver.dfs_solve()
+                        solver.a_star_solve()
                     
                     # Reset button
                     elif x_offset + 90 <= x <= x_offset + 170 and button_y <= y <= button_y + 30:
                         board = Board(current_level)
-                        solver = Solver(board)
                         fixed_cells = {(r, c) for r in range(SIZE) for c in range(SIZE) if board.grid[r, c] != 2}
+                        solver = Solver(board, fixed_cells)
+                        solver.draw_callback = draw_grid
                     
                     # Back button
                     elif x_offset + 180 <= x <= x_offset + 260 and button_y <= y <= button_y + 30:
@@ -198,18 +197,6 @@ def main():
                                     board.grid[board_y, board_x] = 1  # Change to white
                             else:
                                 board.grid[board_y, board_x] = 2
-
-                            # # Check if the puzzle is solved
-                            # win_status = check_win_condition()
-                            # if win_status:
-                            #     font = pygame.font.Font(None, 48)
-                            #     if win_status == "WIN":
-                            #         text = font.render("You Won!", True, (0,255,0))
-                            #     else:
-                            #         text = font.render(win_status, True, (255,0,0))
-                            #     text_rect = text.get_rect(center=(screen.get_width()//2, 50))
-                            #     screen.blit(text, text_rect)
-                            #     pygame.display.flip()
 
     pygame.quit()
 
