@@ -248,100 +248,174 @@ class Solver:
 
     def a_star_solve(self):
         """Solve the board using A* search with improved heuristics and bounded region detection."""
-        # Initialize visited states set to avoid revisiting
-        visited = set()
+        # Maximum number of states to explore before trying a different approach
+        max_states = 50000
+        # Number of random restarts to try
+        max_restarts = 3
         
-        # Priority queue for A* search
-        pq = []
+        print("Starting A* solver with", max_restarts, "restart attempts")
         
-        # Initial state
-        initial_state = self.board.grid.copy()
-        initial_state_tuple = tuple(map(tuple, initial_state))
-        
-        # Use a counter to break ties and ensure unique comparison
-        counter = 0
-        heapq.heappush(pq, (self.calculate_heuristic(initial_state), counter, initial_state_tuple, []))
-        visited.add(initial_state_tuple)
-        
-        # Keep track of the number of states explored
-        states_explored = 0
-        
-        while pq and states_explored < 100000:  # Increased limit for more thorough search
-            # Get the state with lowest f-score (priority)
-            f_score, _, state_tuple, path = heapq.heappop(pq)
-            states_explored += 1
+        for restart in range(max_restarts):
+            print(f"\n--- Restart attempt {restart+1}/{max_restarts} ---")
             
-            # Convert tuple back to numpy array
-            current_state = np.array([list(row) for row in state_tuple])
+            # Initialize visited states set to avoid revisiting
+            visited = set()
             
-            # Update the board for visualization
-            self.board.grid = current_state.copy()
-            if self.draw_callback:
-                self.draw_callback()
+            # Priority queue for A* search
+            pq = []
             
-            # Check if we've reached a solution
-            if not np.any(current_state == 2):  # No empty cells
-                win_status = self.board.check_win_condition()
-                if win_status == "WIN":
-                    return True
-                continue
+            # Initial state
+            initial_state = self.board.grid.copy()
+            initial_state_tuple = tuple(map(tuple, initial_state))
             
-            # Skip states with bounded regions that can't be connected
-            if self.has_bounded_regions(current_state):
-                continue
+            # Use a counter to break ties and ensure unique comparison
+            counter = 0
+            heapq.heappush(pq, (self.calculate_heuristic(initial_state), counter, initial_state_tuple, []))
+            visited.add(initial_state_tuple)
             
-            # Find all empty cells
-            empty_cells = list(zip(*np.where(current_state == 2)))
+            print(f"Initial state - Empty cells: {np.count_nonzero(initial_state == 2)}")
             
-            # Prioritize cells with more filled neighbors (more constrained)
-            empty_cells.sort(key=lambda pos: -self.count_filled_neighbors(pos[0], pos[1], current_state))
+            # For random restarts, try filling a random cell first
+            if restart > 0:
+                empty_cells = list(zip(*np.where(initial_state == 2)))
+                if empty_cells:
+                    # Choose a random empty cell that's not fixed
+                    random_cells = [cell for cell in empty_cells if cell not in self.fixed_cells]
+                    if random_cells:
+                        r, c = random.choice(random_cells)
+                        print(f"Random restart: trying cell ({r}, {c})")
+                        # Try both colors
+                        for color in [0, 1]:
+                            # Check if valid
+                            temp_board = self.board.grid.copy()
+                            self.board.grid = initial_state.copy()
+                            if self.is_valid_move(r, c, color):
+                                new_state = initial_state.copy()
+                                new_state[r, c] = color
+                                # Skip if this creates a bounded region
+                                if self.has_bounded_regions(new_state):
+                                    print(f"  Color {color} creates bounded region, skipping")
+                                    self.board.grid = temp_board
+                                    continue
+                                
+                                new_state_tuple = tuple(map(tuple, new_state))
+                                if new_state_tuple not in visited:
+                                    counter += 1
+                                    heapq.heappush(pq, (self.calculate_heuristic(new_state), counter, new_state_tuple, [(r, c, color)]))
+                                    visited.add(new_state_tuple)
+                                    print(f"  Added state with color {color}")
+                            else:
+                                print(f"  Color {color} is not a valid move")
+                            self.board.grid = temp_board
             
-            # Try each empty cell
-            for r, c in empty_cells[:1]:  # Only try the most constrained cell
-                # Skip if this cell is fixed
-                if (r, c) in self.fixed_cells:
+            # Keep track of the number of states explored
+            states_explored = 0
+            
+            while pq and states_explored < max_states:
+                # Get the state with lowest f-score (priority)
+                f_score, _, state_tuple, path = heapq.heappop(pq)
+                states_explored += 1
+                
+                # Log progress periodically
+                if states_explored % 1000 == 0:
+                    print(f"States explored: {states_explored}, Queue size: {len(pq)}, Current f-score: {f_score}")
+                    print(f"Empty cells remaining: {np.count_nonzero(np.array([list(row) for row in state_tuple]) == 2)}")
+                
+                # Convert tuple back to numpy array
+                current_state = np.array([list(row) for row in state_tuple])
+                
+                # Skip if this state has a bounded region
+                if self.has_bounded_regions(current_state):
+                    if states_explored % 1000 == 0:
+                        print("  Skipping state with bounded region")
                     continue
                 
-                # Try colors in order determined by surrounding cells
-                colors_to_try = self.get_preferred_colors(r, c, current_state)
+                # Update the board for visualization
+                self.board.grid = current_state.copy()
+                if self.draw_callback:
+                    self.draw_callback()
                 
-                for color in colors_to_try:
-                    # Check if this is a valid move
-                    original_board = self.board.grid.copy()
-                    self.board.grid = current_state.copy()
+                # Check if we've reached a solution
+                if not np.any(current_state == 2):  # No empty cells
+                    win_status = self.board.check_win_condition()
+                    if win_status == "WIN":
+                        print(f"Solution found after exploring {states_explored} states!")
+                        return True
+                    else:
+                        print(f"Full board but not a win: {win_status}")
+                    continue
+                
+                # Find all empty cells
+                empty_cells = list(zip(*np.where(current_state == 2)))
+                
+                # Prioritize cells with more filled neighbors (more constrained)
+                empty_cells.sort(key=lambda pos: -self.count_filled_neighbors(pos[0], pos[1], current_state))
+                
+                # Try the most constrained cells first
+                cells_to_try = empty_cells[:min(2, len(empty_cells))]
+                
+                # Occasionally try a random cell to break out of local minima
+                if states_explored % 500 == 0 and len(empty_cells) > 2:
+                    random_cell = random.choice(empty_cells[2:])
+                    cells_to_try.append(random_cell)
+                    if states_explored % 1000 == 0:
+                        print(f"  Trying random cell {random_cell}")
+                
+                for r, c in cells_to_try:
+                    # Skip if this cell is fixed
+                    if (r, c) in self.fixed_cells:
+                        continue
                     
-                    if self.is_valid_move(r, c, color):
-                        # Create a new state by filling this cell
-                        new_state = current_state.copy()
-                        new_state[r, c] = color
-                        
-                        # Skip if this creates bounded regions
-                        if self.has_bounded_regions(new_state):
-                            self.board.grid = original_board
-                            continue
-                        
-                        new_state_tuple = tuple(map(tuple, new_state))
-                        
-                        # Skip if we've seen this state before
-                        if new_state_tuple not in visited:
-                            # Add to visited set
-                            visited.add(new_state_tuple)
-                            
-                            # Calculate new g_score (path cost)
-                            new_g_score = len(path) + 1
-                            
-                            # Calculate new f_score (g_score + heuristic)
-                            new_f_score = new_g_score + self.calculate_heuristic(new_state)
-                            
-                            # Add to priority queue with unique counter to break ties
-                            counter += 1
-                            new_path = path + [(r, c, color)]
-                            heapq.heappush(pq, (new_f_score, counter, new_state_tuple, new_path))
+                    # Try colors in order determined by surrounding cells
+                    colors_to_try = self.get_preferred_colors(r, c, current_state)
                     
-                    # Restore the original board
-                    self.board.grid = original_board
+                    for color in colors_to_try:
+                        # Save the original board state
+                        original_board = self.board.grid.copy()
+                        
+                        # Set up a temporary state for validation
+                        self.board.grid = current_state.copy()
+                        
+                        # Check if this is a valid move
+                        if self.is_valid_move(r, c, color):
+                            # Create a new state by filling this cell
+                            new_state = current_state.copy()
+                            new_state[r, c] = color
+                            
+                            # Skip if this creates a bounded region
+                            if self.has_bounded_regions(new_state):
+                                self.board.grid = original_board
+                                continue
+                            
+                            # Convert to tuple for visited set
+                            new_state_tuple = tuple(map(tuple, new_state))
+                            
+                            # Skip if we've seen this state before
+                            if new_state_tuple not in visited:
+                                # Add to visited set
+                                visited.add(new_state_tuple)
+                                
+                                # Calculate new g_score (path cost)
+                                new_g_score = len(path) + 1
+                                
+                                # Calculate new f_score (g_score + heuristic)
+                                new_f_score = new_g_score + self.calculate_heuristic(new_state)
+                                
+                                # Add to priority queue with unique counter to break ties
+                                counter += 1
+                                new_path = path + [(r, c, color)]
+                                heapq.heappush(pq, (new_f_score, counter, new_state_tuple, new_path))
+                        
+                        # Restore the original board
+                        self.board.grid = original_board
+            
+            print(f"Restart {restart+1} exhausted after exploring {states_explored} states")
         
-        return False  # No solution found
+        print("A* search failed, falling back to DFS")
+        # If we've tried all restarts and still haven't found a solution,
+        # fall back to DFS which might be better for some puzzles
+        return self.dfs_solve()
+
 
 
     def dfs_solve(self):
