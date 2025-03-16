@@ -130,40 +130,14 @@ class Solver:
         
         # Combine all factors
         return empty_count + invalid_blocks_penalty + connectivity_penalty + bounded_regions_penalty + balance_penalty + cross_penalty
-
-    def has_bounded_regions(self, grid):
-        """
-        Check if there are bounded regions that can never be connected.
-        A bounded region is a set of empty cells surrounded by cells of the opposite color,
-        making it impossible for a color to maintain connectivity.
-        """
-        # For each color, find all regions and check if any are bounded
-        for color in [0, 1]:
-            opposite_color = 1 - color
-            
-            # Find all empty cells
-            empty_cells = set(map(tuple, np.argwhere(grid == 2)))
-            if not empty_cells:
-                continue
-                
-            # Find all regions of this color
-            color_regions = self.find_regions(grid, color)
-            
-            # If there's more than one region, check if they can be connected
-            if len(color_regions) > 1:
-                # For each pair of regions, check if they can be connected
-                for i in range(len(color_regions)):
-                    for j in range(i+1, len(color_regions)):
-                        # If these regions can't be connected, the board is invalid
-                        if not self.can_regions_connect(grid, color_regions[i], color_regions[j], empty_cells, opposite_color):
-                            return True
-        
-        return False
-
+    
     def find_regions(self, grid, color):
         """Find all connected regions of a specific color."""
         regions = []
         visited = set()
+        
+        if not hasattr(self, 'disable_logging') or not self.disable_logging:
+            print(f"Finding regions of color {color}")
         
         for r in range(grid.shape[0]):
             for c in range(grid.shape[1]):
@@ -186,19 +160,28 @@ class Solver:
                     
                     regions.append(region)
         
+        if not hasattr(self, 'disable_logging') or not self.disable_logging:
+            print(f"Total regions found for color {color}: {len(regions)}")
         return regions
 
     def can_regions_connect(self, grid, region1, region2, empty_cells, blocking_color):
         """
         Check if two regions of the same color can be connected through empty cells
-        without being blocked by cells of the opposite color.
+        or through existing cells of the same color (including fixed cells).
         """
+        # Determine the color of the regions (they should be the same color)
+        if not region1 or not region2:
+            return False
+        
+        r1, c1 = next(iter(region1))
+        color = grid[r1, c1]
+        
         # Create a set of cells that can't be used for the path (cells of the opposite color)
         blocked_cells = set(map(tuple, np.argwhere(grid == blocking_color)))
         
-        # Use BFS to find a path from region1 to region2 through empty cells
+        # Use BFS to find a path from region1 to region2 through empty cells OR same-color cells
         visited = set()
-        queue = list(region1)
+        queue = list(region1)  # Start from all cells in region1
         visited.update(region1)
         
         while queue:
@@ -211,15 +194,102 @@ class Solver:
                     if (nr, nc) in region2:
                         return True  # Found a direct connection
             
-            # Add empty neighbors to the queue
+            # Add empty neighbors OR same-color neighbors to the queue
             for dr, dc in [(0,1), (1,0), (0,-1), (-1,0)]:
                 nr, nc = r + dr, c + dc
                 if 0 <= nr < grid.shape[0] and 0 <= nc < grid.shape[1]:
-                    if (nr, nc) in empty_cells and (nr, nc) not in visited and (nr, nc) not in blocked_cells:
+                    # Can move through empty cells OR cells of the same color
+                    if ((nr, nc) in empty_cells or grid[nr, nc] == color) and (nr, nc) not in visited:
                         visited.add((nr, nc))
                         queue.append((nr, nc))
         
         # If we've exhausted all possible paths and haven't reached region2, they can't be connected
+        if not hasattr(self, 'disable_logging') or not self.disable_logging:
+            print(f"  No path found between regions of color {color}")
+        return False
+
+    def has_bounded_regions(self, grid):
+        """
+        Check if there are bounded regions that can never be connected.
+        A bounded region is a set of empty cells surrounded by cells of the opposite color,
+        making it impossible for the other color to maintain connectivity.
+        """
+        # For each color, find all regions and check if any are bounded
+        for color in [0, 1]:
+            opposite_color = 1 - color
+            
+            # Find all empty cells
+            empty_cells = set(map(tuple, np.argwhere(grid == 2)))
+            if not empty_cells:
+                continue
+                
+            # Find all regions of this color
+            color_regions = self.find_regions(grid, color)
+            
+            # If there's more than one region, check if they can be connected
+            if len(color_regions) > 1:
+                if not hasattr(self, 'disable_logging') or not self.disable_logging:
+                    print(f"Found {len(color_regions)} regions of color {color}, checking connectivity")
+                
+                # For each pair of regions, check if they can be connected
+                for i in range(len(color_regions)):
+                    for j in range(i+1, len(color_regions)):
+                        # If these regions can't be connected, the board is invalid
+                        if not self.can_regions_connect(grid, color_regions[i], color_regions[j], empty_cells, opposite_color):
+                            if not hasattr(self, 'disable_logging') or not self.disable_logging:
+                                print(f"Color {color} has disconnected regions that cannot be connected")
+                            return True
+        
+        # Check for empty regions completely surrounded by a single color
+        empty_cells = set(map(tuple, np.argwhere(grid == 2)))
+        visited_empty = set()
+        
+        for r, c in empty_cells:
+            if (r, c) in visited_empty:
+                continue
+                    
+            # Start a new region
+            region = set()
+            queue = [(r, c)]
+            region.add((r, c))
+            visited_empty.add((r, c))
+            
+            # Track which colors border this region
+            borders_black = False
+            borders_white = False
+            
+            while queue:
+                curr_r, curr_c = queue.pop(0)
+                
+                # Check all neighbors
+                for dr, dc in [(0,1), (1,0), (0,-1), (-1,0)]:
+                    nr, nc = curr_r + dr, curr_c + dc
+                    if 0 <= nr < grid.shape[0] and 0 <= nc < grid.shape[1]:
+                        if grid[nr, nc] == 2:  # Empty cell
+                            if (nr, nc) not in visited_empty:
+                                visited_empty.add((nr, nc))
+                                region.add((nr, nc))
+                                queue.append((nr, nc))
+                        elif grid[nr, nc] == 0:
+                            borders_black = True
+                        elif grid[nr, nc] == 1:
+                            borders_white = True
+            
+            # If this region is bordered by only one color, it's bounded
+            # EXCEPTION: Single empty cells are not considered bounded, as they can be filled with either color
+            if (borders_black and not borders_white) or (borders_white and not borders_black):
+                # Special case: If it's a single empty cell, it's not bounded (can be filled with either color)
+                if len(region) == 1:
+                    continue
+                    
+                # A region bordered by only one color is problematic (if more than 1 cell)
+                if not hasattr(self, 'disable_logging') or not self.disable_logging:
+                    if borders_black:
+                        print(f"Found empty region of size {len(region)} bordered only by BLACK")
+                    else:
+                        print(f"Found empty region of size {len(region)} bordered only by WHITE")
+                return True
+        
         return False
 
     def get_preferred_colors(self, r, c, grid):
@@ -248,194 +318,147 @@ class Solver:
 
     def a_star_solve(self):
         """Solve the board using A* search with improved heuristics and bounded region detection."""
-        # Maximum number of states to explore before trying a different approach
-        max_states = 50000
-        # Number of random restarts to try
-        max_restarts = 3
+        print("Starting A* solver...")
+        # Initialize visited states set to avoid revisiting
+        visited = set()
         
-        print("Starting A* solver with", max_restarts, "restart attempts")
+        # Priority queue for A* search
+        pq = []
         
-        for restart in range(max_restarts):
-            print(f"\n--- Restart attempt {restart+1}/{max_restarts} ---")
+        # Initial state
+        initial_state = self.board.grid.copy()
+        initial_state_tuple = tuple(map(tuple, initial_state))
+        
+        # Use a counter to break ties and ensure unique comparison
+        counter = 0
+        heapq.heappush(pq, (self.calculate_heuristic(initial_state), counter, initial_state_tuple, []))
+        visited.add(initial_state_tuple)
+        
+        # Keep track of the number of states explored
+        states_explored = 0
+        
+        # Create a flag to temporarily disable logging
+        self.disable_logging = True
+        
+        while pq and states_explored < 100000:  # Increased limit for more thorough search
+            # Get the state with lowest f-score (priority)
+            f_score, _, state_tuple, path = heapq.heappop(pq)
+            states_explored += 1
             
-            # Initialize visited states set to avoid revisiting
-            visited = set()
+            # Convert tuple back to numpy array
+            current_state = np.array([list(row) for row in state_tuple])
             
-            # Priority queue for A* search
-            pq = []
+            # Update the board for visualization
+            self.board.grid = current_state.copy()
+            if self.draw_callback:
+                self.draw_callback()
             
-            # Initial state
-            initial_state = self.board.grid.copy()
-            initial_state_tuple = tuple(map(tuple, initial_state))
+            # Check if we've reached a solution
+            if not np.any(current_state == 2):  # No empty cells
+                win_status = self.board.check_win_condition()
+                if win_status == "WIN":
+                    print(f"A* solution found after exploring {states_explored} states!")
+                    return True
+                continue
             
-            # Use a counter to break ties and ensure unique comparison
-            counter = 0
-            heapq.heappush(pq, (self.calculate_heuristic(initial_state), counter, initial_state_tuple, []))
-            visited.add(initial_state_tuple)
+            # Find all empty cells
+            empty_cells = list(zip(*np.where(current_state == 2)))
             
-            print(f"Initial state - Empty cells: {np.count_nonzero(initial_state == 2)}")
+            # Prioritize cells with more filled neighbors (more constrained)
+            empty_cells.sort(key=lambda pos: -self.count_filled_neighbors(pos[0], pos[1], current_state))
             
-            # For random restarts, try filling a random cell first
-            if restart > 0:
-                empty_cells = list(zip(*np.where(initial_state == 2)))
-                if empty_cells:
-                    # Choose a random empty cell that's not fixed
-                    random_cells = [cell for cell in empty_cells if cell not in self.fixed_cells]
-                    if random_cells:
-                        r, c = random.choice(random_cells)
-                        print(f"Random restart: trying cell ({r}, {c})")
-                        # Try both colors
-                        for color in [0, 1]:
-                            # Check if valid
-                            temp_board = self.board.grid.copy()
-                            self.board.grid = initial_state.copy()
-                            if self.is_valid_move(r, c, color):
-                                new_state = initial_state.copy()
-                                new_state[r, c] = color
-                                # Skip if this creates a bounded region
-                                if self.has_bounded_regions(new_state):
-                                    print(f"  Color {color} creates bounded region, skipping")
-                                    self.board.grid = temp_board
-                                    continue
-                                
-                                new_state_tuple = tuple(map(tuple, new_state))
-                                if new_state_tuple not in visited:
-                                    counter += 1
-                                    heapq.heappush(pq, (self.calculate_heuristic(new_state), counter, new_state_tuple, [(r, c, color)]))
-                                    visited.add(new_state_tuple)
-                                    print(f"  Added state with color {color}")
-                            else:
-                                print(f"  Color {color} is not a valid move")
-                            self.board.grid = temp_board
-            
-            # Keep track of the number of states explored
-            states_explored = 0
-            
-            while pq and states_explored < max_states:
-                # Get the state with lowest f-score (priority)
-                f_score, _, state_tuple, path = heapq.heappop(pq)
-                states_explored += 1
-                
-                # Log progress periodically
-                if states_explored % 1000 == 0:
-                    print(f"States explored: {states_explored}, Queue size: {len(pq)}, Current f-score: {f_score}")
-                    print(f"Empty cells remaining: {np.count_nonzero(np.array([list(row) for row in state_tuple]) == 2)}")
-                
-                # Convert tuple back to numpy array
-                current_state = np.array([list(row) for row in state_tuple])
-                
-                # Skip if this state has a bounded region
-                if self.has_bounded_regions(current_state):
-                    if states_explored % 1000 == 0:
-                        print("  Skipping state with bounded region")
+            # Try each empty cell
+            for r, c in empty_cells[:1]:  # Only try the most constrained cell
+                # Skip if this cell is fixed
+                if (r, c) in self.fixed_cells:
                     continue
                 
-                # Update the board for visualization
-                self.board.grid = current_state.copy()
-                if self.draw_callback:
-                    self.draw_callback()
+                # Try colors in order determined by surrounding cells
+                colors_to_try = self.get_preferred_colors(r, c, current_state)
                 
-                # Check if we've reached a solution
-                if not np.any(current_state == 2):  # No empty cells
-                    win_status = self.board.check_win_condition()
-                    if win_status == "WIN":
-                        print(f"Solution found after exploring {states_explored} states!")
-                        return True
-                    else:
-                        print(f"Full board but not a win: {win_status}")
-                    continue
-                
-                # Find all empty cells
-                empty_cells = list(zip(*np.where(current_state == 2)))
-                
-                # Prioritize cells with more filled neighbors (more constrained)
-                empty_cells.sort(key=lambda pos: -self.count_filled_neighbors(pos[0], pos[1], current_state))
-                
-                # Try the most constrained cells first
-                cells_to_try = empty_cells[:min(2, len(empty_cells))]
-                
-                # Occasionally try a random cell to break out of local minima
-                if states_explored % 500 == 0 and len(empty_cells) > 2:
-                    random_cell = random.choice(empty_cells[2:])
-                    cells_to_try.append(random_cell)
-                    if states_explored % 1000 == 0:
-                        print(f"  Trying random cell {random_cell}")
-                
-                for r, c in cells_to_try:
-                    # Skip if this cell is fixed
-                    if (r, c) in self.fixed_cells:
-                        continue
+                for color in colors_to_try:
+                    # Check if this is a valid move
+                    original_board = self.board.grid.copy()
+                    self.board.grid = current_state.copy()
                     
-                    # Try colors in order determined by surrounding cells
-                    colors_to_try = self.get_preferred_colors(r, c, current_state)
+                    if self.is_valid_move(r, c, color):
+                        # Create a new state by filling this cell
+                        new_state = current_state.copy()
+                        new_state[r, c] = color
+                        
+                        # Check for bounded regions with logging disabled
+                        has_bounded = self.has_bounded_regions(new_state)
+                        
+                        if has_bounded:
+                            self.board.grid = original_board
+                            continue
+                        
+                        new_state_tuple = tuple(map(tuple, new_state))
+                        
+                        # Skip if we've seen this state before
+                        if new_state_tuple not in visited:
+                            # Add to visited set
+                            visited.add(new_state_tuple)
+                            
+                            # Calculate new g_score (path cost)
+                            new_g_score = len(path) + 1
+                            
+                            # Calculate new f_score (g_score + heuristic)
+                            new_f_score = new_g_score + self.calculate_heuristic(new_state)
+                            
+                            # Add to priority queue with unique counter to break ties
+                            counter += 1
+                            new_path = path + [(r, c, color)]
+                            heapq.heappush(pq, (new_f_score, counter, new_state_tuple, new_path))
                     
-                    for color in colors_to_try:
-                        # Save the original board state
-                        original_board = self.board.grid.copy()
-                        
-                        # Set up a temporary state for validation
-                        self.board.grid = current_state.copy()
-                        
-                        # Check if this is a valid move
-                        if self.is_valid_move(r, c, color):
-                            # Create a new state by filling this cell
-                            new_state = current_state.copy()
-                            new_state[r, c] = color
-                            
-                            # Skip if this creates a bounded region
-                            if self.has_bounded_regions(new_state):
-                                self.board.grid = original_board
-                                continue
-                            
-                            # Convert to tuple for visited set
-                            new_state_tuple = tuple(map(tuple, new_state))
-                            
-                            # Skip if we've seen this state before
-                            if new_state_tuple not in visited:
-                                # Add to visited set
-                                visited.add(new_state_tuple)
-                                
-                                # Calculate new g_score (path cost)
-                                new_g_score = len(path) + 1
-                                
-                                # Calculate new f_score (g_score + heuristic)
-                                new_f_score = new_g_score + self.calculate_heuristic(new_state)
-                                
-                                # Add to priority queue with unique counter to break ties
-                                counter += 1
-                                new_path = path + [(r, c, color)]
-                                heapq.heappush(pq, (new_f_score, counter, new_state_tuple, new_path))
-                        
-                        # Restore the original board
-                        self.board.grid = original_board
+                    # Restore the original board
+                    self.board.grid = original_board
             
-            print(f"Restart {restart+1} exhausted after exploring {states_explored} states")
+            # Periodically report progress
+            if states_explored % 1000 == 0:
+                print(f"A* search: {states_explored} states explored, queue size: {len(pq)}")
         
-        print("A* search failed, falling back to DFS")
-        # If we've tried all restarts and still haven't found a solution,
-        # fall back to DFS which might be better for some puzzles
-        return self.dfs_solve()
-
-
+        # Reset the logging flag
+        self.disable_logging = False
+        print(f"A* search exhausted after exploring {states_explored} states")
+        return False  # No solution found
 
     def dfs_solve(self):
         """Solve the board using DFS (backtracking with a stack)."""
+        print("Starting DFS solver...")
         stack = []
+        visited_states = set()  # Track visited states to avoid cycles
         empty_cells = set(map(tuple, np.argwhere(self.board.grid == 2)))  # All empty cells
+        states_explored = 0
 
         if not empty_cells:
             return self.board.check_win_condition() == "WIN"
 
         # Initialize stack with both colors for the first empty cell
         start_r, start_c = next(iter(empty_cells))
+        
         for color in [0, 1]:  
             if self.is_valid_move(start_r, start_c, color):
                 new_grid = self.board.grid.copy()
                 new_grid[start_r, start_c] = color
-                stack.append((start_r, start_c, color, new_grid))
+                
+                # Check for bounded regions
+                self.disable_logging = True
+                has_bounded = self.has_bounded_regions(new_grid)
+                self.disable_logging = False
+                
+                if not has_bounded:
+                    state_tuple = tuple(map(tuple, new_grid))
+                    stack.append((start_r, start_c, color, new_grid))
+                    visited_states.add(state_tuple)
 
         while stack:
             r, c, color, current_grid = stack.pop()  # DFS pops last added state (LIFO)
+            states_explored += 1
+            
+            if states_explored % 1000 == 0:
+                print(f"DFS states explored: {states_explored}, Stack size: {len(stack)}")
+            
             self.board.grid = current_grid  # Update board state
 
             if self.draw_callback:
@@ -443,6 +466,7 @@ class Solver:
 
             if not np.any(current_grid == 2):  # Board is full
                 if self.board.check_win_condition() == "WIN":
+                    print(f"DFS solution found after exploring {states_explored} states!")
                     return True
                 continue
 
@@ -451,21 +475,37 @@ class Solver:
             # Prioritize cells with more filled neighbors
             empty_cells.sort(key=lambda pos: -self.count_filled_neighbors(pos[0], pos[1], current_grid))
             
-            for nr, nc in empty_cells[:1]:  # Only try the most constrained cell
+            next_cells = empty_cells[:1]  # Only try the most constrained cell
+            
+            for nr, nc in next_cells:
                 if (nr, nc) not in self.fixed_cells:
                     for new_color in [0, 1]:  # Try both black and white
                         if self.is_valid_move(nr, nc, new_color):
                             new_grid = current_grid.copy()
                             new_grid[nr, nc] = new_color
-                            stack.append((nr, nc, new_color, new_grid))  # Push to stack (LIFO)
+                            
+                            # Check for bounded regions
+                            self.disable_logging = True
+                            has_bounded = self.has_bounded_regions(new_grid)
+                            self.disable_logging = False
+                            
+                            if not has_bounded:
+                                state_tuple = tuple(map(tuple, new_grid))
+                                if state_tuple not in visited_states:
+                                    stack.append((nr, nc, new_color, new_grid))
+                                    visited_states.add(state_tuple)
 
+        print(f"DFS search exhausted after exploring {states_explored} states")
         return False  # No solution found
-    
+
+
     def bfs_solve(self):
         """Solve the board using BFS (Breadth-First Search)."""
+        print("Starting BFS solver...")
         queue = deque()
-        visited = set()
+        visited_states = set()
         empty_cells = set(map(tuple, np.argwhere(self.board.grid == 2)))  # All empty cells
+        states_explored = 0
 
         if not empty_cells:
             return self.board.check_win_condition() == "WIN"
@@ -476,13 +516,25 @@ class Solver:
             if self.is_valid_move(start_r, start_c, color):
                 new_grid = self.board.grid.copy()
                 new_grid[start_r, start_c] = color
-                state_tuple = tuple(map(tuple, new_grid))
-                if state_tuple not in visited:
-                    queue.append((start_r, start_c, color, new_grid))
-                    visited.add(state_tuple)
+                
+                # Check for bounded regions
+                self.disable_logging = True
+                has_bounded = self.has_bounded_regions(new_grid)
+                self.disable_logging = False
+                
+                if not has_bounded:
+                    state_tuple = tuple(map(tuple, new_grid))
+                    if state_tuple not in visited_states:
+                        queue.append((start_r, start_c, color, new_grid))
+                        visited_states.add(state_tuple)
 
         while queue:
             r, c, color, current_grid = queue.popleft()
+            states_explored += 1
+            
+            if states_explored % 1000 == 0:
+                print(f"BFS states explored: {states_explored}, Queue size: {len(queue)}")
+                
             self.board.grid = current_grid  # Update board state
 
             # Visualize in Pygame
@@ -491,6 +543,7 @@ class Solver:
 
             if not np.any(current_grid == 2):  # Board is full
                 if self.board.check_win_condition() == "WIN":
+                    print(f"BFS solution found after exploring {states_explored} states!")
                     return True
                 continue
 
@@ -499,15 +552,25 @@ class Solver:
             # Prioritize cells with more filled neighbors
             empty_cells.sort(key=lambda pos: -self.count_filled_neighbors(pos[0], pos[1], current_grid))
             
-            for nr, nc in empty_cells[:1]:  # Only try the most constrained cell
+            next_cells = empty_cells[:1]  # Only try the most constrained cell
+            
+            for nr, nc in next_cells:
                 if (nr, nc) not in self.fixed_cells:
                     for new_color in [0, 1]:  # Try both black and white
                         if self.is_valid_move(nr, nc, new_color):
                             new_grid = current_grid.copy()
                             new_grid[nr, nc] = new_color
-                            state_tuple = tuple(map(tuple, new_grid))
-                            if state_tuple not in visited:
-                                queue.append((nr, nc, new_color, new_grid))
-                                visited.add(state_tuple)
+                            
+                            # Check for bounded regions
+                            self.disable_logging = True
+                            has_bounded = self.has_bounded_regions(new_grid)
+                            self.disable_logging = False
+                            
+                            if not has_bounded:
+                                state_tuple = tuple(map(tuple, new_grid))
+                                if state_tuple not in visited_states:
+                                    queue.append((nr, nc, new_color, new_grid))
+                                    visited_states.add(state_tuple)
 
+        print(f"BFS search exhausted after exploring {states_explored} states")
         return False  # No solution found

@@ -96,42 +96,41 @@ def draw_grid():
     # Check win condition and display message
     win_status = board.check_win_condition()
     if win_status:
-        font = pygame.font.Font(None, 48)
+        font_large = pygame.font.Font(None, 48)
         if win_status == "WIN":
-            text = font.render("You Won!", True, (0,255,0))
+            text = font_large.render("You Won!", True, (0,255,0))
         else:
-            text = font.render(win_status, True, (255,0,0))
+            text = font_large.render(win_status, True, (255,0,0))
         text_rect = text.get_rect(center=(screen.get_width()//2, 40))
         screen.blit(text, text_rect)
     
-    # Display elapsed time and memory info
+    # Use consistent font size for time and memory displays
     font = pygame.font.Font(None, 24)
+    
+    # Display elapsed time if solving or after solving
     if solving and solve_start_time:
         elapsed = time.time() - solve_start_time
         time_text = font.render(f"Time: {elapsed:.2f}s", True, BLACK)
         screen.blit(time_text, (x_offset, y_offset - 40))
-        
-        # Only show memory during solving
-        try:
-            memory_usage = process.memory_info().rss / 1024 / 1024  # MB
-            memory_text = font.render(f"Memory: {memory_usage:.2f} MB", True, BLACK)
-            screen.blit(memory_text, (x_offset, y_offset - 20))
-        except Exception:
-            pass
-    
     elif solve_end_time:
-        # After solving, show time and peak memory
         elapsed = solve_end_time - solve_start_time
         time_text = font.render(f"Time: {elapsed:.2f}s", True, BLACK)
         screen.blit(time_text, (x_offset, y_offset - 40))
-        
-        # Only show peak memory after solving is complete
-        if peak_memory > 0:
-            peak_text = font.render(f"Peak Memory: {peak_memory:.2f} MB", True, BLACK)
-            screen.blit(peak_text, (x_offset, y_offset - 20))
+    
+    # Display memory usage
+    if solving and current_memory > 0:
+        # Show current memory usage during solving (relative to baseline) in KB
+        memory_kb = (current_memory - baseline_memory) * 1024  # Convert MB to KB
+        memory_text = font.render(f"Memory: {memory_kb:.2f} KB", True, BLACK)
+        screen.blit(memory_text, (x_offset, y_offset - 20))
+    elif peak_memory > 0:
+        # Show peak memory after solving (relative to baseline) in KB
+        peak_kb = (peak_memory - baseline_memory) * 1024  # Convert MB to KB
+        peak_text = font.render(f"Peak Memory: {peak_kb:.2f} KB", True, BLACK)
+        screen.blit(peak_text, (x_offset, y_offset - 20))
+
     
     pygame.display.flip()
-
 
 def draw_level_menu():
     screen.fill(WHITE)
@@ -170,15 +169,17 @@ def draw_level_menu():
 
 def main():
     global board, solver, fixed_cells, x_offset, y_offset, board_width, board_height, current_level
-    global selected_algo, solving, solve_start_time, solve_end_time, peak_memory
-    
+    global selected_algo, solving, solve_start_time, solve_end_time, peak_memory, current_memory, baseline_memory
+
     # Initialize algorithm selection
     selected_algo = "A*"  # Default algorithm
     solving = False
     solve_start_time = None
     solve_end_time = None
     peak_memory = 0
-    
+    current_memory = 0
+    baseline_memory = 0
+ 
     # Calculate board dimensions and offsets
     board_width = SIZE * CELL_SIZE
     board_height = SIZE * CELL_SIZE
@@ -237,16 +238,28 @@ def main():
                             solving = True
                             solve_start_time = time.time()
                             solve_end_time = None
-                            peak_memory = 0
+                            
+                            # Capture baseline memory before solving
+                            try:
+                                baseline_memory = process.memory_info().rss / 1024 / 1024  # MB
+                                current_memory = baseline_memory
+                                peak_memory = baseline_memory
+                            except:
+                                baseline_memory = 0
+                                current_memory = 0
+                                peak_memory = 0
                             
                             # Run the selected algorithm
                             result = False
                             
                             # Track memory usage during solving
                             def memory_tracking_callback():
-                                global peak_memory
-                                current_memory = process.memory_info().rss / 1024 / 1024  # MB
-                                peak_memory = max(peak_memory, current_memory)
+                                global peak_memory, current_memory
+                                try:
+                                    current_memory = process.memory_info().rss / 1024 / 1024  # MB
+                                    peak_memory = max(peak_memory, current_memory)
+                                except:
+                                    pass
                                 draw_grid()  # Update display with current memory usage
                             
                             # Set the callback for memory tracking
@@ -265,7 +278,8 @@ def main():
                             # Reset the callback
                             solver.draw_callback = draw_grid
                             
-                            print(f"Puzzle solved: {result}, Time: {solve_end_time - solve_start_time:.2f}s, Peak Memory: {peak_memory:.2f} MB")
+                            print(f"Puzzle solved: {result}, Time: {solve_end_time - solve_start_time:.2f}s, Memory Used: {peak_memory - baseline_memory:.2f} MB")
+
                     
                     # Reset button
                     elif x_offset + 90 <= x <= x_offset + 170 and button_y <= y <= button_y + 30:
