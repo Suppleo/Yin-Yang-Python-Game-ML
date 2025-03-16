@@ -2,7 +2,6 @@ import numpy as np
 from collections import deque
 import heapq
 import random
-from config import SIZE
 
 class Solver:
     def __init__(self, board, fixed_cells):
@@ -101,8 +100,8 @@ class Solver:
         
         # Check for 2x2 blocks of same color - penalize heavily
         invalid_cells = set()
-        for r in range(SIZE-1):
-            for c in range(SIZE-1):
+        for r in range(grid.shape[0]-1):
+            for c in range(grid.shape[1]-1):
                 block = grid[r:r+2, c:c+2]
                 if np.all(block == 0) or np.all(block == 1):
                     invalid_cells.update([(r,c), (r,c+1), (r+1,c), (r+1,c+1)])

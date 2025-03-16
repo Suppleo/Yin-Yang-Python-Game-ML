@@ -1,6 +1,5 @@
 import numpy as np
 import pygame
-from config import SIZE, CELL_SIZE, MARGIN, BLACK, WHITE, GRAY
 
 # 0-black, 1-white, 2-gray
 PUZZLE_LEVELS = {
@@ -44,12 +43,26 @@ PUZZLE_LEVELS = {
         [2, 2, 0, 1, 1, 2],
         [2, 2, 2, 2, 2, 2],
     ], dtype=int),
+    # Special 10x10 level
+    6: np.array([
+        [1, 2, 0, 2, 2, 2, 2, 2, 2, 0],
+        [2, 0, 2, 2, 2, 2, 2, 2, 1, 2],
+        [2, 2, 0, 2, 0, 0, 0, 2, 2, 1],
+        [2, 0, 2, 0, 2, 2, 2, 2, 1, 2],
+        [2, 2, 2, 2, 2, 0, 0, 2, 2, 2],
+        [2, 2, 2, 2, 0, 2, 1, 2, 2, 2],
+        [2, 2, 1, 2, 2, 2, 2, 1, 2, 2],
+        [2, 2, 2, 2, 0, 1, 2, 2, 1, 2],
+        [2, 2, 1, 2, 2, 1, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+    ], dtype=int),
 }
 
 class Board:
     def __init__(self, level=1):
         self.level = level
         self.grid = self.load_level(level)
+        self.size = self.grid.shape[0]  # Get board size from grid
     
     def load_level(self, level):
         """Load a predefined puzzle based on level"""
@@ -58,11 +71,12 @@ class Board:
     def set_level(self, level):
         self.level = level
         self.grid = self.load_level(level)
+        self.size = self.grid.shape[0]  # Update size when level changes
 
     def check_2x2_blocks(self):
         invalid_cells = set()
-        for r in range(SIZE-1):
-            for c in range(SIZE-1):
+        for r in range(self.size-1):
+            for c in range(self.size-1):
                 # Check 2x2 block
                 block = self.grid[r:r+2, c:c+2]
                 if np.all(block == 0) or np.all(block == 1):
@@ -71,7 +85,7 @@ class Board:
 
     def check_consecutive_blocks(self):
         def flood_fill(r, c, color, visited):
-            if (r < 0 or r >= SIZE or c < 0 or c >= SIZE or 
+            if (r < 0 or r >= self.size or c < 0 or c >= self.size or 
                 (r,c) in visited or self.grid[r,c] != color):
                 return 0
             visited.add((r,c))
@@ -85,8 +99,8 @@ class Board:
         white_regions = []
         visited = set()
         
-        for r in range(SIZE):
-            for c in range(SIZE):
+        for r in range(self.size):
+            for c in range(self.size):
                 if (r,c) not in visited:
                     if self.grid[r,c] == 0:
                         black_regions.append(flood_fill(r, c, 0, visited))

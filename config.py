@@ -1,8 +1,5 @@
 # Configuration file for Yin-Yang Puzzle
-global SIZE, CELL_SIZE
-
 # Board settings
-SIZE = 6 # Default board size (6x6 grid)
 CELL_SIZE = 50  # Each cell is 50x50 pixels
 MARGIN = 2  # Margin between cells
 

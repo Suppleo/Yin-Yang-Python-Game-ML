@@ -4,12 +4,13 @@ import time
 import psutil
 import os
 from solver import Solver
-from config import SIZE, CELL_SIZE, WHITE, BLACK, GRAY, BLUE
+from config import CELL_SIZE, WHITE, BLACK, GRAY, BLUE
 from board import Board
 
-# Khởi tạo pygame
+# Initialize pygame
 pygame.init()
-screen = pygame.display.set_mode((SIZE * CELL_SIZE * 2, SIZE * CELL_SIZE * 2)) 
+# Start with a normal window size for the menu
+screen = pygame.display.set_mode((600, 600))
 pygame.display.set_caption("Yin-Yang Puzzle")
 
 # Get the current process for memory tracking
@@ -18,17 +19,20 @@ process = psutil.Process(os.getpid())
 def draw_grid():
     screen.fill(WHITE)
     
+    # Get the current board size
+    board_size = board.size
+    
     # Calculate offsets to center the board
-    board_width = SIZE * CELL_SIZE
-    board_height = SIZE * CELL_SIZE
+    board_width = board_size * CELL_SIZE
+    board_height = board_size * CELL_SIZE
     x_offset = (screen.get_width() - board_width) // 2
     y_offset = (screen.get_height() - (board_height + 100)) // 2  # Increased space for buttons
     
     invalid_cells = board.check_2x2_blocks()
 
     # Draw board with red backgrounds for invalid cells
-    for r in range(SIZE):
-        for c in range(SIZE):
+    for r in range(board_size):
+        for c in range(board_size):
             bg_color = (255,0,0) if (r,c) in invalid_cells else GRAY
             pygame.draw.rect(screen, bg_color, 
                            (x_offset + c * CELL_SIZE, 
@@ -93,6 +97,20 @@ def draw_grid():
     screen.blit(bfs_text, (x_offset + 115, algo_button_y + 5))
     screen.blit(astar_text, (x_offset + 205, algo_button_y + 5))
 
+    # Add "?" button for Level 5 to access 10x10 board
+    if current_level == 5:
+        question_button_size = 30
+        pygame.draw.rect(screen, (100, 100, 100),
+                        (screen.get_width() - question_button_size - 10,
+                         screen.get_height() - question_button_size - 10,
+                         question_button_size,
+                         question_button_size))
+        question_text = font.render("?", True, WHITE)
+        question_rect = question_text.get_rect(center=(
+                                              screen.get_width() - question_button_size//2 - 10,
+                                              screen.get_height() - question_button_size//2 - 10))
+        screen.blit(question_text, question_rect)
+
     # Check win condition and display message
     win_status = board.check_win_condition()
     if win_status:
@@ -117,18 +135,10 @@ def draw_grid():
         time_text = font.render(f"Time: {elapsed:.2f}s", True, BLACK)
         screen.blit(time_text, (x_offset, y_offset - 40))
     
-    # Display memory usage
-    if solving and current_memory > 0:
-        # Show current memory usage during solving (relative to baseline) in KB
-        memory_kb = (current_memory - baseline_memory) * 1024  # Convert MB to KB
-        memory_text = font.render(f"Memory: {memory_kb:.2f} KB", True, BLACK)
+    # Display memory usage (only show algorithm memory usage, not total app memory)
+    if peak_memory > 0:
+        memory_text = font.render(f"Memory: {peak_memory:.2f} KB", True, BLACK)
         screen.blit(memory_text, (x_offset, y_offset - 20))
-    elif peak_memory > 0:
-        # Show peak memory after solving (relative to baseline) in KB
-        peak_kb = (peak_memory - baseline_memory) * 1024  # Convert MB to KB
-        peak_text = font.render(f"Peak Memory: {peak_kb:.2f} KB", True, BLACK)
-        screen.blit(peak_text, (x_offset, y_offset - 20))
-
     
     pygame.display.flip()
 
@@ -169,22 +179,17 @@ def draw_level_menu():
 
 def main():
     global board, solver, fixed_cells, x_offset, y_offset, board_width, board_height, current_level
-    global selected_algo, solving, solve_start_time, solve_end_time, peak_memory, current_memory, baseline_memory
-
+    global selected_algo, solving, solve_start_time, solve_end_time, peak_memory
+    
     # Initialize algorithm selection
     selected_algo = "A*"  # Default algorithm
     solving = False
     solve_start_time = None
     solve_end_time = None
     peak_memory = 0
-    current_memory = 0
-    baseline_memory = 0
- 
-    # Calculate board dimensions and offsets
-    board_width = SIZE * CELL_SIZE
-    board_height = SIZE * CELL_SIZE
-    x_offset = (screen.get_width() - board_width) // 2
-    y_offset = (screen.get_height() - (board_height + 100)) // 2  # Increased space for buttons
+    
+    # Set up initial window size for menu
+    resize_window(600, 600)
 
     running = True
     while running:
@@ -205,12 +210,13 @@ def main():
                     button_height = 60
                     button_spacing = 80
                     
+                    # Check if regular level buttons were clicked
                     for i in range(5):
                         if (screen.get_width()//2 - button_width//2 <= x <= screen.get_width()//2 + button_width//2 and 
                             180 + i*button_spacing <= y <= 180 + i*button_spacing + button_height):
                             current_level = i + 1
                             board = Board(current_level)    
-                            fixed_cells = {(r, c) for r in range(SIZE) for c in range(SIZE) if board.grid[r, c] != 2}
+                            fixed_cells = {(r, c) for r in range(board.size) for c in range(board.size) if board.grid[r, c] != 2}
                             solver = Solver(board, fixed_cells)
                             solver.draw_callback = draw_grid
                             level_selected = True
@@ -218,6 +224,9 @@ def main():
                             solve_start_time = None
                             solve_end_time = None
                             peak_memory = 0
+                            
+                            # Resize window based on board size
+                            resize_window_for_board(board.size)
                             break
         
         # Game loop for selected level
@@ -229,8 +238,38 @@ def main():
                 
                 elif event.type == pygame.MOUSEBUTTONDOWN and not solving:
                     x, y = event.pos
+                    
+                    # Calculate board dimensions and offsets for the current board size
+                    board_width = board.size * CELL_SIZE
+                    board_height = board.size * CELL_SIZE
+                    x_offset = (screen.get_width() - board_width) // 2
+                    y_offset = (screen.get_height() - (board_height + 100)) // 2
+                    
                     button_y = y_offset + board_height + 10
                     algo_button_y = button_y + 40
+                    
+                    # Check if "?" button was clicked (only on Level 5)
+                    if current_level == 5:
+                        question_button_size = 30
+                        question_button_x = screen.get_width() - question_button_size - 10
+                        question_button_y = screen.get_height() - question_button_size - 10
+                        
+                        if (question_button_x <= x <= question_button_x + question_button_size and
+                            question_button_y <= y <= question_button_y + question_button_size):
+                            # Load the special 10x10 level
+                            current_level = 6  # Level 6 is our 10x10 level
+                            board = Board(current_level)
+                            fixed_cells = {(r, c) for r in range(board.size) for c in range(board.size) if board.grid[r, c] != 2}
+                            solver = Solver(board, fixed_cells)
+                            solver.draw_callback = draw_grid
+                            solving = False
+                            solve_start_time = None
+                            solve_end_time = None
+                            peak_memory = 0
+                            
+                            # Resize window for 10x10 board
+                            resize_window_for_board(board.size)
+                            continue
                     
                     # Solve button
                     if x_offset <= x <= x_offset + 80 and button_y <= y <= button_y + 30:
@@ -238,28 +277,21 @@ def main():
                             solving = True
                             solve_start_time = time.time()
                             solve_end_time = None
+                            peak_memory = 0
                             
-                            # Capture baseline memory before solving
-                            try:
-                                baseline_memory = process.memory_info().rss / 1024 / 1024  # MB
-                                current_memory = baseline_memory
-                                peak_memory = baseline_memory
-                            except:
-                                baseline_memory = 0
-                                current_memory = 0
-                                peak_memory = 0
+                            # Get baseline memory before solving
+                            baseline_memory = process.memory_info().rss / 1024  # KB
                             
                             # Run the selected algorithm
                             result = False
                             
                             # Track memory usage during solving
                             def memory_tracking_callback():
-                                global peak_memory, current_memory
-                                try:
-                                    current_memory = process.memory_info().rss / 1024 / 1024  # MB
-                                    peak_memory = max(peak_memory, current_memory)
-                                except:
-                                    pass
+                                global peak_memory
+                                current_memory = process.memory_info().rss / 1024  # KB
+                                # Calculate memory used by algorithm (relative to baseline)
+                                algorithm_memory = current_memory - baseline_memory
+                                peak_memory = max(peak_memory, algorithm_memory)
                                 draw_grid()  # Update display with current memory usage
                             
                             # Set the callback for memory tracking
@@ -278,13 +310,12 @@ def main():
                             # Reset the callback
                             solver.draw_callback = draw_grid
                             
-                            print(f"Puzzle solved: {result}, Time: {solve_end_time - solve_start_time:.2f}s, Memory Used: {peak_memory - baseline_memory:.2f} MB")
-
+                            print(f"Puzzle solved: {result}, Time: {solve_end_time - solve_start_time:.2f}s, Memory: {peak_memory:.2f} KB")
                     
                     # Reset button
                     elif x_offset + 90 <= x <= x_offset + 170 and button_y <= y <= button_y + 30:
                         board = Board(current_level)
-                        fixed_cells = {(r, c) for r in range(SIZE) for c in range(SIZE) if board.grid[r, c] != 2}
+                        fixed_cells = {(r, c) for r in range(board.size) for c in range(board.size) if board.grid[r, c] != 2}
                         solver = Solver(board, fixed_cells)
                         solver.draw_callback = draw_grid
                         solving = False
@@ -295,6 +326,8 @@ def main():
                     # Back button
                     elif x_offset + 180 <= x <= x_offset + 260 and button_y <= y <= button_y + 30:
                         level_selected = False
+                        # Reset window size for menu
+                        resize_window(600, 600)
                         break
                     
                     # DFS button
@@ -314,7 +347,7 @@ def main():
                         x_offset <= x <= x_offset + board_width):
                         board_x = (x - x_offset) // CELL_SIZE
                         board_y = (y - y_offset) // CELL_SIZE
-                        if (board_y, board_x) not in fixed_cells:
+                        if (board_y, board_x) not in fixed_cells and board_y < board.size and board_x < board.size:
                             if event.button == 1:  # Left click
                                 if board.grid[board_y, board_x] == 0:  # If black
                                     board.grid[board_y, board_x] = 2  # Change to grey
@@ -329,6 +362,20 @@ def main():
                                 board.grid[board_y, board_x] = 2
 
     pygame.quit()
+
+def resize_window(width, height):
+    """Resize the pygame window to the specified dimensions."""
+    global screen
+    screen = pygame.display.set_mode((width, height))
+
+def resize_window_for_board(board_size):
+    """Resize the window based on the board size."""
+    # For 10x10 board, make the window larger
+    if board_size == 10:
+        resize_window(800, 800)
+    else:
+        # For smaller boards, use a standard size
+        resize_window(600, 600)
 
 if __name__ == "__main__":
     main()
