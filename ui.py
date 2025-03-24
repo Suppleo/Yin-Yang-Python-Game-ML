@@ -17,6 +17,10 @@ pygame.display.set_caption("Yin-Yang Puzzle")
 process = psutil.Process(os.getpid())
 
 def draw_grid():
+    """
+    Draw the game board, buttons, and status information.
+    This function is called repeatedly to update the display.
+    """
     screen.fill(WHITE)
     
     # Get the current board size
@@ -43,6 +47,7 @@ def draw_grid():
                             y_offset + r * CELL_SIZE, 
                             CELL_SIZE, CELL_SIZE), 1)
             
+            # Draw cell contents (black or white circles)
             if board.grid[r, c] != 2:
                 color = BLACK if board.grid[r, c] == 0 else WHITE
                 center = (x_offset + c * CELL_SIZE + CELL_SIZE//2,
@@ -50,7 +55,7 @@ def draw_grid():
                 radius = CELL_SIZE//2 - 4
                 pygame.draw.circle(screen, color, center, radius)
 
-                # Add brown dot for fixed cells
+                # Add brown dot for fixed cells (cells that were pre-filled)
                 if (r, c) in fixed_cells:
                     pygame.draw.circle(screen, (139,69,19), center, 4)
     
@@ -70,15 +75,15 @@ def draw_grid():
     # Algorithm selection buttons
     algo_button_y = button_y + 40
     
-    # DFS button
+    # DFS button (green when selected, gray otherwise)
     dfs_color = (0, 150, 0) if selected_algo == "DFS" else (100, 100, 100)
     pygame.draw.rect(screen, dfs_color, (x_offset, algo_button_y, 80, 30))
     
-    # BFS button
+    # BFS button (green when selected, gray otherwise)
     bfs_color = (0, 150, 0) if selected_algo == "BFS" else (100, 100, 100)
     pygame.draw.rect(screen, bfs_color, (x_offset + 90, algo_button_y, 80, 30))
     
-    # A* button
+    # A* button (green when selected, gray otherwise)
     astar_color = (0, 150, 0) if selected_algo == "A*" else (100, 100, 100)
     pygame.draw.rect(screen, astar_color, (x_offset + 180, algo_button_y, 80, 30))
     
@@ -140,9 +145,14 @@ def draw_grid():
         memory_text = font.render(f"Memory: {peak_memory:.2f} KB", True, BLACK)
         screen.blit(memory_text, (x_offset, y_offset - 20))
     
+    # Update the display
     pygame.display.flip()
 
 def draw_level_menu():
+    """
+    Draw the level selection menu screen.
+    Shows title, subtitle, and level selection buttons.
+    """
     screen.fill(WHITE)
     font_large = pygame.font.Font(None, 48)
     font_normal = pygame.font.Font(None, 36)
@@ -163,6 +173,7 @@ def draw_level_menu():
     button_height = 60
     button_spacing = 80
     
+    # Draw 5 level buttons
     for i in range(5):
         pygame.draw.rect(screen, BLUE, 
                         (screen.get_width()//2 - button_width//2, 
@@ -178,6 +189,10 @@ def draw_level_menu():
 
 
 def main():
+    """
+    Main game loop function.
+    Handles level selection, game interaction, and algorithm execution.
+    """
     global board, solver, fixed_cells, x_offset, y_offset, board_width, board_height, current_level
     global selected_algo, solving, solve_start_time, solve_end_time, peak_memory
     
@@ -359,17 +374,29 @@ def main():
                                 else:
                                     board.grid[board_y, board_x] = 1  # Change to white
                             else:
-                                board.grid[board_y, board_x] = 2
+                                board.grid[board_y, board_x] = 2 # Middle click clears the cell
 
     pygame.quit()
 
 def resize_window(width, height):
-    """Resize the pygame window to the specified dimensions."""
+    """
+    Resize the pygame window to the specified dimensions.
+    
+    Args:
+        width (int): New window width in pixels
+        height (int): New window height in pixels
+    """
     global screen
     screen = pygame.display.set_mode((width, height))
 
 def resize_window_for_board(board_size):
-    """Resize the window based on the board size."""
+    """
+    Resize the window based on the board size.
+    Larger boards need bigger windows to display properly.
+    
+    Args:
+        board_size (int): Size of the board (e.g., 6 for 6x6, 10 for 10x10)
+    """
     # For 10x10 board, make the window larger
     if board_size == 10:
         resize_window(800, 800)

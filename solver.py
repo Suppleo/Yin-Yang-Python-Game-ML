@@ -5,12 +5,29 @@ import random
 
 class Solver:
     def __init__(self, board, fixed_cells):
+        """
+        Initialize the solver with a board and fixed cells.
+        
+        Args:
+            board: The Board object to solve
+            fixed_cells: Set of (row, col) tuples representing cells that cannot be changed
+        """
         self.board = board
         self.fixed_cells = fixed_cells  # Cells that cannot be changed
-        self.draw_callback = None  # Will be set by UI
+        self.draw_callback = None  # Will be set by UI to update display during solving
+        self.disable_logging = False  # Flag to control debug output
 
     def is_valid_move(self, r, c, color):
-        """Check if placing `color` at (r, c) is valid."""
+        """
+        Check if placing a color at position (r, c) is valid according to Yin-Yang rules.
+        
+        Args:
+            r, c (int): Row and column coordinates
+            color (int): Color to place (0=black, 1=white)
+            
+        Returns:
+            bool: True if the move is valid, False otherwise
+        """
         if self.board.grid[r, c] != 2:  # Ensure the cell is empty
             return False
         
@@ -33,7 +50,15 @@ class Solver:
         return True
 
     def check_2x2_cross(self, grid=None):
-        """Check for forbidden 2x2 crosses of black and white."""
+        """
+        Check for forbidden 2x2 crosses of black and white (checkerboard pattern).
+        
+        Args:
+            grid (numpy.ndarray, optional): Grid to check, uses board grid if None
+            
+        Returns:
+            bool: True if no forbidden crosses exist, False otherwise
+        """
         if grid is None:
             grid = self.board.grid
             
@@ -49,7 +74,17 @@ class Solver:
         return True
 
     def count_filled_neighbors(self, r, c, grid=None):
-        """Count how many adjacent cells are already filled."""
+        """
+        Count how many adjacent cells are already filled (not empty).
+        Used for heuristic evaluation and move ordering.
+        
+        Args:
+            r, c (int): Row and column coordinates
+            grid (numpy.ndarray, optional): Grid to check, uses board grid if None
+            
+        Returns:
+            int: Number of filled neighbors (0-4)
+        """
         if grid is None:
             grid = self.board.grid
             
@@ -61,7 +96,16 @@ class Solver:
         return count
 
     def is_single_connected_group(self, grid, color):
-        """Check if all cells of `color` are part of a single connected group using BFS."""
+        """
+        Check if all cells of a specific color form a single connected group.
+        
+        Args:
+            grid (numpy.ndarray): Grid to check
+            color (int): Color to check (0=black, 1=white)
+            
+        Returns:
+            bool: True if all cells of the color form a single connected group
+        """
         visited = set()
         start = None
 
@@ -80,6 +124,7 @@ class Solver:
         queue = [start]
         visited.add(start)
 
+        # BFS to find all connected cells of the same color
         while queue:
             r, c = queue.pop(0)
             for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
@@ -94,7 +139,16 @@ class Solver:
         return len(visited) == total_cells
 
     def calculate_heuristic(self, grid):
-        """Calculate heuristic value for A* search."""
+        """
+        Calculate heuristic value for A* search.
+        Lower values are better (goal is to minimize this value).
+        
+        Args:
+            grid (numpy.ndarray): Grid to evaluate
+            
+        Returns:
+            int: Heuristic value (lower is better)
+        """
         # Count empty cells - fewer is better
         empty_count = np.count_nonzero(grid == 2)
         
@@ -292,7 +346,17 @@ class Solver:
         return False
 
     def get_preferred_colors(self, r, c, grid):
-        """Determine which color to try first based on surrounding cells."""
+        """
+        Determine which color to try first based on surrounding cells.
+        This helps avoid creating 2x2 blocks by trying the opposite color first.
+        
+        Args:
+            r, c (int): Row and column coordinates
+            grid (numpy.ndarray): Current grid state
+            
+        Returns:
+            list: Colors to try in preferred order [first_choice, second_choice]
+        """
         # Count adjacent cells of each color
         black_count = 0
         white_count = 0
@@ -316,7 +380,14 @@ class Solver:
             return [0, 1]
 
     def a_star_solve(self):
-        """Solve the board using A* search with improved heuristics and bounded region detection."""
+        """
+        Solve the board using A* search algorithm.
+        A* uses a priority queue to explore the most promising states first,
+        guided by a heuristic function.
+        
+        Returns:
+            bool: True if a solution was found, False otherwise
+        """
         print("Starting A* solver...")
         # Initialize visited states set to avoid revisiting
         visited = set()
@@ -394,7 +465,7 @@ class Solver:
                         
                         new_state_tuple = tuple(map(tuple, new_state))
                         
-                        # Skip if we've seen this state before
+                        # Check if this state has been visited before
                         if new_state_tuple not in visited:
                             # Add to visited set
                             visited.add(new_state_tuple)
@@ -423,7 +494,13 @@ class Solver:
         return False  # No solution found
 
     def dfs_solve(self):
-        """Solve the board using DFS (backtracking with a stack)."""
+        """
+        Solve the board using Depth-First Search (DFS).
+        DFS explores as far as possible along each branch before backtracking.
+        
+        Returns:
+            bool: True if a solution was found, False otherwise
+        """
         print("Starting DFS solver...")
         stack = []
         visited_states = set()  # Track visited states to avoid cycles
@@ -499,7 +576,13 @@ class Solver:
 
 
     def bfs_solve(self):
-        """Solve the board using BFS (Breadth-First Search)."""
+        """
+        Solve the board using Breadth-First Search (BFS).
+        BFS explores all neighbor states before moving to the next level.
+        
+        Returns:
+            bool: True if a solution was found, False otherwise
+        """
         print("Starting BFS solver...")
         queue = deque()
         visited_states = set()
