@@ -388,7 +388,7 @@ class Solver:
         Returns:
             bool: True if a solution was found, False otherwise
         """
-        print("Starting A* solver...")
+        print("\n=== Starting A* Search ===")
         # Initialize visited states set to avoid revisiting
         visited = set()
         
@@ -398,6 +398,10 @@ class Solver:
         # Initial state
         initial_state = self.board.grid.copy()
         initial_state_tuple = tuple(map(tuple, initial_state))
+
+        # Initial priority is based on heuristic of initial state
+        initial_heuristic = self.calculate_heuristic(initial_state)
+        print(f"Initial state heuristic: {initial_heuristic}")
         
         # Use a counter to break ties and ensure unique comparison
         counter = 0
@@ -414,6 +418,25 @@ class Solver:
             # Get the state with lowest f-score (priority)
             f_score, _, state_tuple, path = heapq.heappop(pq)
             states_explored += 1
+
+            # Print detailed state every 10 states
+            if states_explored % 10 == 0:
+                print(f"\n--- A* State #{states_explored} ---")
+                print(f"Queue size: {len(pq)}, Current f-score: {f_score}")
+                print("Current board state:")
+                current_state = np.array([list(row) for row in state_tuple])
+                for row in current_state:
+                    print(" ".join(["■" if cell == 0 else "□" if cell == 1 else "·" for cell in row]))
+                
+                # Print top 3 states in queue (if available)
+                if len(pq) > 0:
+                    print("\nTop 3 states in priority queue:")
+                    top_states = sorted(pq)[:min(3, len(pq))]
+                    for i, (score, _, state_t, _) in enumerate(top_states):
+                        print(f"State {i+1}, f-score: {score}")
+                        state_arr = np.array([list(row) for row in state_t])
+                        empty_count = np.count_nonzero(state_arr == 2)
+                        print(f"Empty cells: {empty_count}")
             
             # Convert tuple back to numpy array
             current_state = np.array([list(row) for row in state_tuple])
@@ -493,6 +516,7 @@ class Solver:
         print(f"A* search exhausted after exploring {states_explored} states")
         return False  # No solution found
 
+
     def dfs_solve(self):
         """
         Solve the board using Depth-First Search (DFS).
@@ -509,6 +533,8 @@ class Solver:
 
         if not empty_cells:
             return self.board.check_win_condition() == "WIN"
+        
+        print(f"Initial board has {len(empty_cells)} empty cells")
 
         # Initialize stack with both colors for the first empty cell
         start_r, start_c = next(iter(empty_cells))
@@ -527,13 +553,28 @@ class Solver:
                     state_tuple = tuple(map(tuple, new_grid))
                     stack.append((start_r, start_c, color, new_grid))
                     visited_states.add(state_tuple)
+                    print(f"Added initial move: ({start_r}, {start_c}) = {color}")
 
         while stack:
             r, c, color, current_grid = stack.pop()  # DFS pops last added state (LIFO)
             states_explored += 1
             
-            if states_explored % 1000 == 0:
-                print(f"DFS states explored: {states_explored}, Stack size: {len(stack)}")
+            # Print detailed state every 10 states
+            if states_explored % 10 == 0:
+                print(f"\n--- DFS State #{states_explored} ---")
+                print(f"Stack size: {len(stack)}")
+                print(f"Current position: ({r}, {c}) = {color}")
+                print("Current board state:")
+                for row in current_grid:
+                    print(" ".join(["■" if cell == 0 else "□" if cell == 1 else "·" for cell in row]))
+                
+                # Print top of stack (if available)
+                if stack:
+                    print("\nTop of stack:")
+                    top_r, top_c, top_color, _ = stack[-1]
+                    print(f"Next position to explore: ({top_r}, {top_c}) = {top_color}")
+                    empty_count = np.count_nonzero(current_grid == 2)
+                    print(f"Empty cells remaining: {empty_count}")
             
             self.board.grid = current_grid  # Update board state
 
@@ -614,8 +655,22 @@ class Solver:
             r, c, color, current_grid = queue.popleft()
             states_explored += 1
             
-            if states_explored % 1000 == 0:
-                print(f"BFS states explored: {states_explored}, Queue size: {len(queue)}")
+            # Print detailed state every 10 states
+            if states_explored % 10 == 0:
+                print(f"\n--- BFS State #{states_explored} ---")
+                print(f"Queue size: {len(queue)}")
+                print(f"Current position: ({r}, {c}) = {color}")
+                print("Current board state:")
+                for row in current_grid:
+                    print(" ".join(["■" if cell == 0 else "□" if cell == 1 else "·" for cell in row]))
+                
+                # Print front of queue (if available)
+                if queue:
+                    print("\nFront of queue:")
+                    front_r, front_c, front_color, _ = queue[0]
+                    print(f"Next position to explore: ({front_r}, {front_c}) = {front_color}")
+                    empty_count = np.count_nonzero(current_grid == 2)
+                    print(f"Empty cells remaining: {empty_count}")
                 
             self.board.grid = current_grid  # Update board state
 
